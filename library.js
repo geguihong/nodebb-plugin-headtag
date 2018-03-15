@@ -3,6 +3,7 @@
 var async = module.parent.require('async');
 var meta = module.parent.require('./meta');
 var topics = module.parent.require('./topics');
+var user = module.parent.require('./user');
 var privileges = module.parent.require('./privileges');
 var SocketPlugins = module.parent.require('./socket.io/plugins');
 
@@ -60,25 +61,36 @@ plugin.addThreadTools = function (data, callback) {
 	
 	meta.settings.get('headtag', function(err, settings) {
 		var list = safeParse(settings)
-		
-		data.tools = data.tools.concat(list.map((ele, index) => {
-			return {
-				class: 'tool-headtag',
-				title: 'Mark as ' + ele.name,
-				icon: 'fa-question-circle',
-				key: ele.key
-			};
-		}).concat({
-			class: 'tool-headtag',
-			title: 'Delete Mark',
-			icon: 'fa-question-circle'
-		}));
 
-		callback(null, data)
+		user.isAdministrator(data.uid, function(err, isAdministrator) {
+			if (err) {
+				return callback(err)
+			}
+
+			if (!isAdministrator) {
+				return callback(null, data);
+			}
+
+			data.tools = data.tools.concat(list.map((ele, index) => {
+				return {
+					class: 'tool-headtag',
+					title: '-> ' + ele.name,
+					icon: 'fa-question-circle',
+					key: ele.key
+				};
+			}).concat({
+				class: 'tool-headtag',
+				title: 'Delete Mark',
+				icon: 'fa-question-circle'
+			}));
+
+			callback(null, data)
+		})
 	})
 };
 
 plugin.getTopics = function (data, callback) {
+
 	var topics = data.topics;
 
 	meta.settings.get('headtag', function(err, settings) {
@@ -113,12 +125,12 @@ function handleSocketIO() {
 	SocketPlugins.headtag = {};
 
 	SocketPlugins.headtag.set = function (socket, data, callback) {
-		privileges.topics.canEdit(data.tid, socket.uid, function (err, canEdit) {
+		user.isAdministrator(socket.uid, function (err, isAdministrator) {
 			if (err) {
 				return callback(err);
 			}
 
-			if (!canEdit) {
+			if (!isAdministrator) {
 				return callback(new Error('[[error:no-privileges]]'));
 			}
 
@@ -128,7 +140,7 @@ function handleSocketIO() {
 }
 
 function setHelper(tid, key, next) {
-	if (key === null) {
+	if (!key) {
 		topics.deleteTopicField(tid, 'headtag', next);
 	} else {
 		topics.setTopicField(tid, 'headtag', key, next);
